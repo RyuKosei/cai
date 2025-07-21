@@ -37,6 +37,7 @@ import uuid
 from typing import Dict, List, Optional
 from dotenv import load_dotenv  # pylint: disable=import-error
 load_dotenv()
+from cai.util import load_cai_config
 
 
 class QdrantConnector:
@@ -92,14 +93,19 @@ class QdrantConnector:
         if self.model_name.startswith("text"):
             if self._openai_client is None:
                 import openai  # pylint: disable=import-error
-                
-                api_key = os.getenv("OPENAI_API_KEY")
+                config = load_cai_config()
+                api_key = None
+                base_url = None
+                if config:
+                    api_key = config.get("api_key")
+                    base_url = config.get("api_base")
                 if not api_key:
-                    # Generate a random API key if none is provided
-                    api_key = str(uuid.uuid4())
+                    api_key = os.getenv("OPENAI_API_KEY")
+                if not base_url:
+                    base_url = "https://api.openai.com/v1"
                 self._openai_client = openai.Client(
                     api_key=api_key,
-                    base_url="https://api.openai.com/v1"
+                    base_url=base_url
                 )
         else:
             if self._model is None:

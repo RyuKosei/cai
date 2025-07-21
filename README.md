@@ -1,5 +1,21 @@
 # Cybersecurity AI (`CAI`)
 
+> **第三方API适配说明**：
+> 
+> 本项目已支持如BOYUE等第三方OpenAI兼容API。只需在`cai/config/config.json`中填写你的`api_key`、`api_base`和`models`（模型列表），即可全局生效，无需修改其他代码。
+> 
+> 示例：
+> ```json
+> {
+>   "provider": "boyue",
+>   "api_key": "你的key",
+>   "api_base": "https://api.boyue.com/v1",
+>   "models": ["boyue-model-1", "boyue-model-2"]
+> }
+> ```
+> 
+> 若未填写，将自动回退到环境变量配置。
+
 <div align="center">
   <p>
     <a align="center" href="" target="https://github.com/aliasrobotics/CAI">

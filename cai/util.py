@@ -1737,3 +1737,19 @@ def load_prompt_template(template_path, **template_vars):
     except Exception as e:
         debug_print(1, f"Failed to render template '{template_path}': {str(e)}")
         raise ValueError(f"Failed to render template '{template_path}': {str(e)}")
+
+def load_cai_config():
+    """
+    尝试加载cai/config/config.json，返回dict，若不存在或无效则返回None。
+    """
+    config_path = os.path.join(os.path.dirname(__file__), 'config', 'config.json')
+    if not os.path.exists(config_path):
+        # 兼容绝对路径
+        config_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../config/config.json'))
+        if not os.path.exists(config_path):
+            return None
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return None

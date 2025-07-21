@@ -14,6 +14,7 @@ from rich.table import Table  # pylint: disable=import-error
 from rich.panel import Panel  # pylint: disable=import-error
 from cai.core import get_ollama_api_base
 from cai.repl.commands.base import Command, register_command
+from cai.util import load_cai_config
 
 console = Console()
 
@@ -132,6 +133,20 @@ class ModelCommand(Command):
             ]
         }
 
+        # 优先从config.json读取模型列表
+        config = load_cai_config()
+        config_models = []
+        if config and config.get('models') and isinstance(config['models'], list):
+            for m in config['models']:
+                config_models.append({
+                    "name": m,
+                    "provider": config.get('provider', 'Custom'),
+                    "category": "Config",
+                    "description": f"Model from config.json: {m}",
+                    "input_cost": None,
+                    "output_cost": None
+                })
+
         # Fetch model pricing data from LiteLLM GitHub repository
         model_pricing_data = {}
         try:
@@ -158,9 +173,10 @@ class ModelCommand(Command):
                 "[yellow]Warning: Could not fetch model pricing data[/yellow]"
             )
 
-        # Create a flat list of all models for numeric selection
-        # pylint: disable=invalid-name
+        # Create一个flat list of all models for numeric selection
         ALL_MODELS = []
+        if config_models:
+            ALL_MODELS.extend(config_models)
         for category, models in MODEL_CATEGORIES.items():
             for model in models:
                 # Get pricing info if available

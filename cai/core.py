@@ -57,6 +57,7 @@ from cai.util import (
     flatten_gemini_fields,
     get_template_content,
     load_prompt_template,
+    load_cai_config,
 )
 from cai.util import start_active_time, start_idle_time
 from cai.internal.components.metrics import process_intermediate_metrics
@@ -181,9 +182,16 @@ class CAI:  # pylint: disable=too-many-instance-attributes
         # load env variables
         load_dotenv()
 
-        openai_api_key = os.getenv("OPENAI_API_KEY")
-        if not openai_api_key:
-            os.environ["OPENAI_API_KEY"] = "sk-proj-1234567890"
+        # 优先读取config.json
+        config = load_cai_config()
+        if config and config.get('api_key'):
+            os.environ["OPENAI_API_KEY"] = config["api_key"]
+        if config and config.get('api_base'):
+            os.environ["OPENAI_API_BASE"] = config["api_base"]
+        if config and config.get('models') and isinstance(config['models'], list) and len(config['models']) > 0:
+            self.default_model = config['models'][0]
+        else:
+            self.default_model = os.getenv("CAI_MODEL", "qwen2.5:14b")
 
     def get_chat_completion(  # pylint: disable=too-many-arguments,too-many-locals,too-many-branches,line-too-long,too-many-statements # noqa: E501
         self,
@@ -272,7 +280,7 @@ class CAI:  # pylint: disable=too-many-instance-attributes
         # Inference parameters
         # --------------------------------
         create_params = {
-            "model": model_override or agent.model,
+            "model": model_override or agent.model or getattr(self, 'default_model', None),
             "messages": messages,
             "stream": stream,
         }
@@ -302,6 +310,11 @@ class CAI:  # pylint: disable=too-many-instance-attributes
 
             # set temperature to 0 when using structured output
             create_params["temperature"] = 0.0
+        # 强制boyue等自定义provider用openai协议
+        config = load_cai_config()
+        if config and config.get('provider', '').lower() == 'boyue':
+            create_params["custom_llm_provider"] = "openai"
+            create_params["api_base"] = config.get("api_base")
         # NOTE: This is a workaround to avoid errors with O1 and O3 models
         # since reasoners don't support parallel tool calls, nor
         # temperature
@@ -359,11 +372,14 @@ class CAI:  # pylint: disable=too-many-instance-attributes
                     if os.getenv("OLLAMA", "").lower() == "true":
                         litellm_completion = litellm.completion(
                             **create_params,
-                            api_base=get_ollama_api_base(),
+                            api_base=os.environ.get("OPENAI_API_BASE"),
                             custom_llm_provider="openai"
                         )
                     else:
-                        litellm_completion = litellm.completion(**create_params)
+                        litellm_completion = litellm.completion(
+                            **create_params,
+                            api_base=os.environ.get("OPENAI_API_BASE")
+                        )
                 except litellm.AuthenticationError as e:
                     # Extract provider information from the model string
                     model_name = create_params.get("model", "Unknown model")
