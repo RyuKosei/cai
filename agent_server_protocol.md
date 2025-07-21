@@ -43,10 +43,12 @@ Agent Server 需实现如下RESTful接口，bench端通过HTTP与其交互，实
   ```json
   {
     "flag": "flag{xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx}",
-    "log": "完整log内容"
+    "log": "完整log内容",
+    "step": 42,         // 当前进度
+    "total": 100        // 总步数
   }
   ```
-  - 若未完成，可返回 `{}` 或 `{ "status": "pending" }`
+  - 若未完成，可返回 `{ "step": 当前步, "total": 100 }`，flag和log为空
 
 ### 4. 停止任务
 
@@ -68,7 +70,7 @@ Agent Server 需实现如下RESTful接口，bench端通过HTTP与其交互，实
 
 - Flask/FastAPI实现接口，内部可用多线程/异步处理任务。
 - agent端收到/model和/chat后，启动内部攻击循环，log实时写入内存或文件。
-- /result接口返回最新flag和log内容。
+- /result接口每次返回最新step和total，未完成时flag/log可为空，完成时返回全部内容。
 - /stop接口可终止当前任务，清理资源。
 
 ## 示例（Flask）
