@@ -1,6 +1,6 @@
 {
   "provider": "boyue",
-  "api_key": "sk-Lb6SgncjKdzpPu8l1xh7AP8whk6dAHvNHXjFeLyZhNskYGKL",
+  "api_key": "",
   "api_base": "http://35.220.164.252:3888/v1",
   "models": [
     "gemini-2.5-flash"
