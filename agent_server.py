@@ -1,6 +1,6 @@
 import threading
 import time
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Body
 from pydantic import BaseModel
 from typing import Optional
 import os
@@ -103,6 +103,47 @@ def stop():
         current_task["stop_flag"] = True
     return {"status": "ok"}
 
+@app.post("/mcp/load")
+def mcp_load(data: dict = Body(...)):
+    """
+    加载MCP服务器，如 {"url": "http://localhost:9876/sse", "label": "burp"}
+    """
+    url = data.get("url")
+    label = data.get("label")
+    if not url or not label:
+        return {"status": "error", "msg": "url和label必填"}
+    try:
+        from cai.mcp import MCPManager
+        mcp_mgr = MCPManager.get()
+        mcp_mgr.load(label, url)
+        return {"status": "ok", "msg": f"MCP {label} loaded", "tools": list(mcp_mgr.get(label).tools.keys())}
+    except Exception as e:
+        return {"status": "error", "msg": str(e)}
+
+@app.post("/mcp/add")
+def mcp_add(data: dict = Body(...)):
+    """
+    将MCP工具加入agent，如 {"label": "burp", "agent": "Red Team Agent"}
+    """
+    label = data.get("label")
+    agent_name = data.get("agent", "Red Team Agent")
+    try:
+        from cai.mcp import MCPManager
+        mcp_mgr = MCPManager.get()
+        mcp = mcp_mgr.get(label)
+        agents = get_available_agents()
+        agent = None
+        for a in agents.values():
+            if a.name == agent_name or a.name.lower() == agent_name.lower():
+                agent = a
+                break
+        if not agent:
+            return {"status": "error", "msg": f"Agent {agent_name} not found"}
+        mcp.add_tools_to_agent(agent)
+        return {"status": "ok", "msg": f"Tools from {label} added to {agent_name}", "tools": list(agent.tools.keys())}
+    except Exception as e:
+        return {"status": "error", "msg": str(e)}
+
 def print_step_info(step, total, msg, agent, model):
     # 简略展示，每步不超过10行，超出用省略号
     content = msg.get("content", "")
@@ -200,6 +241,79 @@ def run_cai_task():
             current_task["status"] = f"error: {e}"
             current_task["log"] += f"\n[Exception]: {e}\n"
 
+def auto_load_burp():
+    try:
+        from cai.repl.commands import mcp as mcp_cmd
+        from cai.agents import get_available_agents
+        # 加载burp
+        ok = mcp_cmd.McpCommand().handle_load(["http://localhost:9876/sse", "burp"])
+        if not ok:
+            print("自动加载burp失败（连接失败）")
+            return
+        # 注入到Red Team Agent（手动方式）
+        agents = get_available_agents()
+        agent = None
+        for a in agents.values():
+            if a.name.lower() == "red team agent":
+                agent = a
+                break
+        if not agent:
+            print("burp已连接，但Red Team Agent未找到")
+            return
+        tools = mcp_cmd.mcp_tools_cache.get("burp", [])
+        if not hasattr(agent, "functions") or not isinstance(agent.functions, list):
+            agent.functions = []
+        existing_names = {f.__name__ for f in agent.functions if callable(f)}
+        added = 0
+        for tool in tools:
+            try:
+                wrapper = mcp_cmd.create_tool_wrapper(
+                    server_label="burp",
+                    tool_name=tool.name,
+                    tool_desc=tool.description,
+                    schema=tool.inputSchema
+                )
+                if wrapper.__name__ in existing_names:
+                    continue
+                agent.functions.append(wrapper)
+                existing_names.add(wrapper.__name__)
+                added += 1
+            except Exception as e:
+                print(f"注入工具{tool.name}失败: {e}")
+        if added:
+            print(f"已自动加载burp并注入Red Team Agent（{added}个工具）")
+        else:
+            print("burp已连接，但无工具注入")
+    except Exception as e:
+        print(f"自动加载burp失败: {e}")
+
+def print_server_info():
+    from cai.agents import get_available_agents
+    agents = list(get_available_agents().values())
+    agent = None
+    for a in agents:
+        if a.name.lower() == "red team agent":
+            agent = a
+            break
+    if not agent:
+        agent = agents[0]
+    print("\n================ Agent Server 启动信息 ================" )
+    print(f"Agent模式: Red Team Agent")
+    print(f"描述: Agent that mimic pentester/red teamer in a security assessment...")
+    print(f"最大步数: {MAX_TURNS}")
+    tools = getattr(agent, "tools", {})
+    if hasattr(tools, 'keys'):
+        print(f"本地Tools: {list(tools.keys())}")
+    else:
+        print(f"本地Tools: []")
+    # 展示所有functions
+    functions = getattr(agent, "functions", [])
+    func_names = [f.__name__ for f in functions if callable(f)]
+    print(f"所有可用工具（含MCP）: {func_names}")
+    print("====================================================\n")
+
 if __name__ == "__main__":
+    auto_load_burp()
+    print_server_info()
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000) 
