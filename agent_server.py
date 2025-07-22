@@ -17,7 +17,7 @@ from cai.util import load_cai_config
 
 app = FastAPI()
 
-MAX_TURNS = 100  # 统一最大步数
+MAX_TURNS = 5  # 统一最大步数
 
 # 全局任务状态
 current_task = {
@@ -82,19 +82,18 @@ def result():
     with task_lock:
         if current_task["result"] is not None:
             return {
-                "flag": current_task["flag"],
-                "log": current_task["log"],
-                "result": current_task["result"],
+                "flag": current_task["result"],  # 现在flag字段为最后一轮总结内容
+                "logfile": current_task["logfile"] or "",  # log文件绝对路径
                 "status": "ok",
                 "step": current_task["step"],
                 "total": current_task["total"]
             }
         else:
-            # 未完成时返回当前进度和log
+            # 未完成时返回当前进度和logfile为空
             return {
                 "step": current_task["step"],
                 "total": current_task["total"],
-                "log": current_task["log"]
+                "logfile": ""
             }
 
 @app.post("/stop")
@@ -152,7 +151,7 @@ def print_step_info(step, total, msg, agent, model):
     if len(lines) > 10:
         short += "\n..."
     time_str = datetime.now().strftime("%H:%M:%S")
-    print(f"[INFO] [{step}/{total}] Agent: {msg.get('sender', agent.name)} | Model: {model} | Time: {time_str}\n{short}\n{'-'*40}")
+    # print(f"[INFO] [{step}/{total}] Agent: {msg.get('sender', agent.name)} | Model: {model} | Time: {time_str}\n{short}\n{'-'*40}")  # 去掉冗余输出
     return f"[INFO] [{step}/{total}] Agent: {msg.get('sender', agent.name)} | Model: {model} | Time: {time_str}\n{short}\n{'-'*40}\n"
 
 def compress_box_content(box_str, max_lines=10):
