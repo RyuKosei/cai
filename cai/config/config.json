@@ -1,8 +1,17 @@
 {
   "provider": "boyue",
-  "api_key": "sk-8iTHHFL52iQkPZBeeQ6zEghrW27QkXX60Fa6tTSzSerzXKkV",
+  "api_key": "",
   "api_base": "http://35.220.164.252:3888/v1",
   "models": [
-    "gemini-2.5-flash"
+    "gemini-2.5-flash",
+    "gpt-4o-2024-11-20",
+    "o4-mini-2025-04-16",
+    "claude-3-7-sonnet-20250219",
+    "deepseek-v3",
+    "deepseek-r1",
+    "meta-llama/llama-3.1-405b-instruct",
+    "mistralai/mistral-small-3.1-24b-instruct",
+    "Qwen/Qwen3-32B",
+    "Qwen/QwQ-32B"
   ]
 } 
