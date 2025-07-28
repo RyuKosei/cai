@@ -567,6 +567,44 @@ class CAI:  # pylint: disable=too-many-instance-attributes
                 self.total_output_tokens += (
                     self.interaction_output_tokens
                 )
+            else:
+                # 处理第三方API可能不返回usage字段的情况
+                # 尝试从响应中提取token信息
+                try:
+                    # 检查是否有其他方式获取token信息
+                    if hasattr(litellm_completion, 'usage') and litellm_completion.usage is None:
+                        # 第三方API可能不提供token统计，设置为0
+                        self.interaction_input_tokens = 0
+                        self.interaction_output_tokens = 0
+                        self.interaction_reasoning_tokens = 0
+                        print(f"[WARNING] 第三方API未返回token使用统计信息")
+                    else:
+                        # 尝试从响应对象中提取token信息
+                        response_dict = litellm_completion.model_dump() if hasattr(litellm_completion, 'model_dump') else {}
+                        usage_info = response_dict.get('usage', {})
+                        
+                        if usage_info:
+                            self.interaction_input_tokens = usage_info.get('prompt_tokens', 0)
+                            self.interaction_output_tokens = usage_info.get('completion_tokens', 0)
+                            self.interaction_reasoning_tokens = usage_info.get('reasoning_tokens', 0)
+                        else:
+                            # 如果完全无法获取token信息，设置为0
+                            self.interaction_input_tokens = 0
+                            self.interaction_output_tokens = 0
+                            self.interaction_reasoning_tokens = 0
+                            print(f"[WARNING] 无法从API响应中获取token使用统计信息")
+                        
+                        # 更新累计token数
+                        self.total_input_tokens += self.interaction_input_tokens
+                        self.total_output_tokens += self.interaction_output_tokens
+                        self.total_reasoning_tokens += self.interaction_reasoning_tokens
+                        
+                except Exception as e:
+                    # 如果出现异常，设置为0
+                    self.interaction_input_tokens = 0
+                    self.interaction_output_tokens = 0
+                    self.interaction_reasoning_tokens = 0
+                    print(f"[WARNING] 处理token统计时出现异常: {e}")
 
             try:
                 interaction_cost = litellm.completion_cost(

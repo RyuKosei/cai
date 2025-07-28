@@ -1,7 +1,7 @@
 {
   "provider": "boyue",
   "api_key": "",
-  "api_base": "http://35.220.164.252:3888/v1",
+  "api_base": "http://34.13.73.248:3888/v1",
   "models": [
     "gemini-2.5-flash",
     "gpt-4o-2024-11-20",
@@ -9,9 +9,41 @@
     "claude-3-7-sonnet-20250219",
     "deepseek-v3",
     "deepseek-r1",
-    "meta-llama/llama-3.1-405b-instruct",
     "mistralai/mistral-small-3.1-24b-instruct",
-    "Qwen/Qwen3-32B",
-    "Qwen/QwQ-32B"
-  ]
+    "Qwen/Qwen3-32B"
+  ],
+  "model_pricing": {
+    "gemini-2.5-flash": {
+      "input_cost_per_1m_tokens": 0.3,
+      "output_cost_per_1m_tokens": 2.5
+    },
+    "gpt-4o-2024-11-20": {
+      "input_cost_per_1m_tokens": 2.5,
+      "output_cost_per_1m_tokens": 10.0
+    },
+    "o4-mini-2025-04-16": {
+      "input_cost_per_1m_tokens": 1.1,
+      "output_cost_per_1m_tokens": 4.4
+    },
+    "claude-3-7-sonnet-20250219": {
+      "input_cost_per_1m_tokens": 3.0,
+      "output_cost_per_1m_tokens": 15.0
+    },
+    "deepseek-v3": {
+      "input_cost_per_1m_tokens": 2.0,
+      "output_cost_per_1m_tokens": 8.0
+    },
+    "deepseek-r1": {
+      "input_cost_per_1m_tokens": 4.0,
+      "output_cost_per_1m_tokens": 16.0
+    },
+    "mistralai/mistral-small-3.1-24b-instruct": {
+      "input_cost_per_1m_tokens": 0.1,
+      "output_cost_per_1m_tokens": 0.3
+    },
+    "Qwen/Qwen3-32B": {
+      "input_cost_per_1m_tokens": 1.0,
+      "output_cost_per_1m_tokens": 4.0
+    }
+  }
 } 

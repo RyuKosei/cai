@@ -17,7 +17,7 @@ from cai.util import load_cai_config
 
 app = FastAPI()
 
-MAX_TURNS = 5  # 统一最大步数
+MAX_TURNS = 50  # 统一最大步数
 
 # 全局任务状态
 current_task = {
@@ -31,7 +31,11 @@ current_task = {
     "prompt": None,
     "step": 0,
     "total": MAX_TURNS,
-    "logfile": None
+    "logfile": None,
+    "start_time": None,
+    "end_time": None,
+    "total_tokens": 0,
+    "total_cost": 0.0
 }
 
 # 线程安全锁
@@ -45,6 +49,34 @@ def get_red_team_agent(model_name: str) -> Agent:
         agent = agents[0]
     agent.model = model_name
     return agent
+
+def calculate_token_cost(input_tokens: int, output_tokens: int, model: str) -> float:
+    """
+    根据config.json中的定价计算token花费
+    
+    Args:
+        input_tokens: 输入token数
+        output_tokens: 输出token数
+        model: 模型名称
+    
+    Returns:
+        float: 总花费（美元）
+    """
+    config = load_cai_config()
+    if not config or "model_pricing" not in config:
+        # 默认定价：1美元/100万token
+        input_cost_per_1m = 1.0
+        output_cost_per_1m = 1.0
+    else:
+        model_pricing = config["model_pricing"].get(model, {})
+        input_cost_per_1m = model_pricing.get("input_cost_per_1m_tokens", 1.0)
+        output_cost_per_1m = model_pricing.get("output_cost_per_1m_tokens", 1.0)
+    
+    # 计算花费（token数 / 100万 * 每百万token价格）
+    input_cost = (input_tokens / 1000000) * input_cost_per_1m
+    output_cost = (output_tokens / 1000000) * output_cost_per_1m
+    
+    return input_cost + output_cost
 
 class ModelRequest(BaseModel):
     model: str
@@ -72,6 +104,10 @@ def chat(data: ChatRequest):
         current_task["step"] = 0
         current_task["total"] = MAX_TURNS
         current_task["logfile"] = None
+        current_task["start_time"] = time.time()
+        current_task["end_time"] = None
+        current_task["total_tokens"] = 0
+        current_task["total_cost"] = 0.0
         t = threading.Thread(target=run_cai_task)
         current_task["thread"] = t
         t.start()
@@ -80,20 +116,34 @@ def chat(data: ChatRequest):
 @app.get("/result")
 def result():
     with task_lock:
+        # 计算任务耗时
+        duration = 0.0
+        if current_task["start_time"] and current_task["end_time"]:
+            duration = current_task["end_time"] - current_task["start_time"]
+        elif current_task["start_time"]:
+            duration = time.time() - current_task["start_time"]
+        
         if current_task["result"] is not None:
+            # 任务完成时返回完整结果
             return {
                 "flag": current_task["result"],  # 现在flag字段为最后一轮总结内容
                 "logfile": current_task["logfile"] or "",  # log文件绝对路径
                 "status": "ok",
                 "step": current_task["step"],
-                "total": current_task["total"]
+                "total": current_task["total"],
+                "duration": round(duration, 2),  # 任务耗时（秒）
+                "total_tokens": current_task["total_tokens"],  # 总token数
+                "total_cost": round(current_task["total_cost"], 6)  # 总花费（美元）
             }
         else:
-            # 未完成时返回当前进度和logfile为空
+            # 未完成时返回当前进度和实时统计信息
             return {
                 "step": current_task["step"],
                 "total": current_task["total"],
-                "logfile": ""
+                "logfile": "",
+                "duration": round(duration, 2),
+                "total_tokens": current_task["total_tokens"],
+                "total_cost": round(current_task["total_cost"], 6)
             }
 
 @app.post("/stop")
@@ -194,6 +244,7 @@ def run_cai_task():
         total = MAX_TURNS
         log_acc = ""
         agent_obj = agent
+        
         for i in range(MAX_TURNS):
             if current_task["stop_flag"]:
                 break
@@ -203,6 +254,7 @@ def run_cai_task():
                 agent_obj, history, context_variables, model_override=None,
                 stream=False, debug=2, execute_tools=True, n_turn=step
             )
+            
             # 获取最新一轮消息
             msg = None
             if history:
@@ -212,10 +264,26 @@ def run_cai_task():
             # 简略输出
             info_str = print_step_info(step, total, msg, agent_obj, model)
             log_acc += info_str
+            
+            # 从CAI对象获取累计token统计
+            total_input_tokens = getattr(cai, 'total_input_tokens', 0)
+            total_output_tokens = getattr(cai, 'total_output_tokens', 0)
+            total_tokens = total_input_tokens + total_output_tokens
+            
+            # 调试信息：检查CAI对象的token属性
+            print(f"[DEBUG] Step {step}: CAI对象token属性:")
+            print(f"  - total_input_tokens: {total_input_tokens}")
+            print(f"  - total_output_tokens: {total_output_tokens}")
+            print(f"  - interaction_input_tokens: {getattr(cai, 'interaction_input_tokens', 'N/A')}")
+            print(f"  - interaction_output_tokens: {getattr(cai, 'interaction_output_tokens', 'N/A')}")
+            
             with task_lock:
                 current_task["step"] = step
                 current_task["total"] = total
                 current_task["log"] = log_acc
+                current_task["total_tokens"] = total_tokens
+                # 计算当前总花费
+                current_task["total_cost"] = calculate_token_cost(total_input_tokens, total_output_tokens, model)
             # flag抽取
             import re
             flag = None
@@ -228,6 +296,11 @@ def run_cai_task():
             # 终止条件：flag找到或agent返回None
             if flag or result is None:
                 break
+        
+        # 记录结束时间
+        with task_lock:
+            current_task["end_time"] = time.time()
+        
         # 最后一轮回复
         last_msg = history[-1] if history else None
         with task_lock:
@@ -237,6 +310,7 @@ def run_cai_task():
             current_task["total"] = total
     except Exception as e:
         with task_lock:
+            current_task["end_time"] = time.time()
             current_task["status"] = f"error: {e}"
             current_task["log"] += f"\n[Exception]: {e}\n"
 
